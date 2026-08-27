@@ -7,10 +7,6 @@
 
 ## Defeitos conhecidos das fontes
 
-- A API TheSportsDB (chave gratuita) limita a tabela de classificação a 5 times por consulta (os primeiros colocados). A tabela completa dos 20 times exigiria assinatura paga (Patreon).
-
-## Defeitos conhecidos das fontes
-
 ### Odds de futebol (Kaggle)
 - Colunas de odds de diferentes casas de apostas (B365, BW, IW, VC, WH) sao 
   fortemente correlacionadas entre si -- todas precificam o mesmo jogo. 
