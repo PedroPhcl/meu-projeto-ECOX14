@@ -65,3 +65,33 @@ ao mandante)?
   não erros de coleta. Mantidos no dataset, apenas marcados.
 - Nenhuma odd abaixo de 1.0 encontrada (seria erro de domínio).
 - Salvo em dados/prata/odds_futebol.parquet (760 linhas, 32 colunas).
+
+## Atributos derivados
+
+### prob_casa, prob_empate, prob_visitante
+Probabilidade implícita do mercado (1/odd) para cada resultado, calculada a
+partir da odd média da Bet365 (B365H/D/A). É a base direta da pergunta
+norteadora do projeto: comparar essa probabilidade com a frequência real
+de resultados observados.
+
+### prob_casa_faixa
+Quartil da probabilidade implícita de vitória do mandante (qcut, 4 faixas).
+Serve para agrupar jogos por faixa de favoritismo e comparar, dentro de
+cada faixa, se a probabilidade média do mercado bate com a frequência real
+de vitórias -- é o método de calibração central do projeto.
+
+### chave_time (fonte de classificação)
+Nome do time normalizado (sem acento, minúsculo, sinônimos mapeados) para
+permitir cruzar a fonte de classificação com a fonte de odds. Mapa de
+sinônimos ainda parcial (cobre só os 5 times vistos até agora, pela
+limitação da chave gratuita da TheSportsDB).
+
+## Módulo de limpeza
+As funções `tirar_espacos`, `chave_texto` e `aplicar_mapa` foram movidas
+para `src/limpeza.py`, por não mencionarem nenhuma fonte específica e
+servirem a qualquer uma. Os dicionários de sinônimos (ex: MAPA_TIMES)
+continuam nos scripts de cada fonte, pois são específicos dela.
+
+## Correção
+A função `tirar_espacos` foi criada na aula de limpeza mas nunca chamada
+na main -- corrigido nesta aula.
