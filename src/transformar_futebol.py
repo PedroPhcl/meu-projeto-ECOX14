@@ -1,4 +1,5 @@
 import json
+import limpeza
 from datetime import datetime
 from pathlib import Path
 
@@ -108,26 +109,45 @@ def registrar(origem, destino, antes, depois, decisoes):
     with caminho.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
+def calcular_probabilidade_implicita(df):
+    df["prob_casa"] = 1 / df["B365H"]
+    df["prob_empate"] = 1 / df["B365D"]
+    df["prob_visitante"] = 1 / df["B365A"]
+    return df
+
+def faixa_probabilidade(df, coluna, n_faixas=4):
+    df[coluna + "_faixa"] = pd.qcut(
+        df[coluna], q=n_faixas, duplicates="drop"
+    ).astype(str)
+    return df
+
 
 def main():
     df, origem = carregar()
     antes = len(df)
+    df = limpeza.tirar_espacos(df)         
     df = separar_premier_league(df)
     df = calcular_temporada(df)
     df = separar_ultimas_temporadas(df)
+    print(sorted(df["HomeTeam"].unique()))
     df = conferir_chave(df)
     df = converter_tipos(df)
+    df = calcular_probabilidade_implicita(df)
+    df = faixa_probabilidade(df, "prob_casa")
     df = marcar_extremos(df, "B365A")
     df = marcar_zscore(df, "B365A")
     df = marcar_extremos(df, "B365H")
     df = marcar_zscore(df, "B365H")
     destino = salvar(df)
     registrar(origem, destino, antes, len(df), [
-        "filtrado para Premier League (Div=E0)",
-        "filtrado para as 2 temporadas mais recentes (2021/22, 2022/23)",
-        "odds convertidas para numerico",
-        "extremos marcados por IQR e z-score, mas mantidos (sao jogos reais, nao erros)",
-    ])
+    "espacos removidos (nomes de coluna e texto)",
+    "filtrado para Premier League (Div=E0)",
+    "filtrado para as 2 temporadas mais recentes (2021/22, 2022/23)",
+    "odds convertidas para numerico",
+    "extremos marcados por IQR e z-score, mas mantidos (sao jogos reais, nao erros)",
+    "probabilidade implicita calculada (1/odd) para casa, empate e visitante",
+    "prob_casa dividida em 4 faixas por quartil (qcut), convertida para texto",
+])
 
 
 if __name__ == "__main__":
