@@ -7,14 +7,14 @@ PADRAO = "odds_*.csv"
 RELATORIOS = Path("relatorios")
 
 
-def mais_recente():
+def mais_recente(): #procura o arquivo mais recente
     arquivos = sorted(BRONZE.glob(PADRAO))
     if not arquivos:
         raise FileNotFoundError("bronze vazia")
     return arquivos[-1]
 
 
-def gerar(caminho):
+def gerar(caminho): #le o CSV e envia pra biblioteca que calcula estats e outros
     df = pd.read_csv(caminho)
     perfil = ProfileReport(df, title=caminho.name)
     RELATORIOS.mkdir(exist_ok=True)

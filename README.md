@@ -93,5 +93,5 @@ servirem a qualquer uma. Os dicionários de sinônimos (ex: MAPA_TIMES)
 continuam nos scripts de cada fonte, pois são específicos dela.
 
 ## Correção
-A função `tirar_espacos` foi criada na aula de limpeza mas nunca chamada
-na main -- corrigido nesta aula.
+A função `tirar_espacos` foi criada na aula de limpeza mas nunca tinha 
+sido chamada na main, foi corrigido nesta aula.
