@@ -9,7 +9,7 @@ BRONZE = Path("dados/bronze/futebol")
 PRATA = Path("dados/prata")
 PADRAO = "odds_*.csv"
 
-def carregar():
+def carregar(): #le o CSV mais recente da bronze
     arquivos = sorted(BRONZE.glob(PADRAO))
     if not arquivos:
         raise FileNotFoundError(f"nada em {BRONZE}")
@@ -32,7 +32,7 @@ def separar_premier_league(df):
     print("outras ligas  :", (~e_premier).sum())
     return df[e_premier].copy()
 
-def calcular_temporada(df):
+def calcular_temporada(df): 
     df["Date"] = pd.to_datetime(df["Date"], format="%Y-%m-%d")
     ano_temporada = df["Date"].dt.year.where(
         df["Date"].dt.month >= 7, df["Date"].dt.year - 1
@@ -67,14 +67,14 @@ def converter_tipos(df):
         df[coluna] = pd.to_numeric(df[coluna], errors="coerce")
     return df
 
-def limites_iqr(serie):
+def limites_iqr(serie): #calcula os limites usando quartis
     q1 = serie.quantile(0.25)
     q3 = serie.quantile(0.75)
     iqr = q3 - q1
     return q1 - 1.5 * iqr, q3 + 1.5 * iqr
 
 
-def marcar_extremos(df, coluna):
+def marcar_extremos(df, coluna): #usa IQR para marcar
     baixo, alto = limites_iqr(df[coluna])
     df[coluna + "_extremo"] = (
         (df[coluna] < baixo) | (df[coluna] > alto))
@@ -82,14 +82,26 @@ def marcar_extremos(df, coluna):
     return df
 
 
-def marcar_zscore(df, coluna, limite=3):
+def marcar_zscore(df, coluna, limite=3): #marca extremos usando desvio padrao
     z = (df[coluna] - df[coluna].mean()) / df[coluna].std()
     df[coluna + "_z"] = z.abs() > limite
     print(coluna, "z acima de", limite, ":",
           df[coluna + "_z"].sum())
     return df
 
-def salvar(df):
+def calcular_probabilidade_implicita(df): #1/odd vira valor do mercado
+    df["prob_casa"] = 1 / df["B365H"]
+    df["prob_empate"] = 1 / df["B365D"]
+    df["prob_visitante"] = 1 / df["B365A"]
+    return df
+
+def faixa_probabilidade(df, coluna, n_faixas=4): #agrupa os jogos nos 4 quartis
+    df[coluna + "_faixa"] = pd.qcut(
+        df[coluna], q=n_faixas, duplicates="drop"
+    ).astype(str)
+    return df
+
+def salvar(df): #salva em .parquet
     PRATA.mkdir(parents=True, exist_ok=True)
     destino = PRATA / "odds_futebol.parquet"
     df.to_parquet(destino, index=False)
@@ -108,18 +120,6 @@ def registrar(origem, destino, antes, depois, decisoes):
     caminho = PRATA / "proveniencia.jsonl"
     with caminho.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
-
-def calcular_probabilidade_implicita(df):
-    df["prob_casa"] = 1 / df["B365H"]
-    df["prob_empate"] = 1 / df["B365D"]
-    df["prob_visitante"] = 1 / df["B365A"]
-    return df
-
-def faixa_probabilidade(df, coluna, n_faixas=4):
-    df[coluna + "_faixa"] = pd.qcut(
-        df[coluna], q=n_faixas, duplicates="drop"
-    ).astype(str)
-    return df
 
 
 def main():

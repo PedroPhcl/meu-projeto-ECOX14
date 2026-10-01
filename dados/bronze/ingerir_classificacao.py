@@ -8,7 +8,7 @@ URL = "https://www.thesportsdb.com/api/v1/json/123/lookuptable.php"
 BRONZE = Path("dados/bronze/classificacao")
 
 
-def buscar():
+def buscar(): #puxa a tabela da PL
     r = requests.get(URL, params={
         "l": "4328",           # id da Premier League na TheSportsDB
         "s": "2024-2025"       # temporada
@@ -17,7 +17,7 @@ def buscar():
     return r.json()
 
 
-def conferir(dados):
+def conferir(dados): #confere chave e lista os times que vieram
     tabela = dados.get("table")
     if not tabela:
         raise ValueError("resposta veio sem 'table' -- confira parametros l/s")
@@ -26,7 +26,7 @@ def conferir(dados):
     return tabela
 
 
-def salvar(tabela):
+def salvar(tabela): #Transforma a Lista em CSV
     BRONZE.mkdir(parents=True, exist_ok=True)
     df = pd.json_normalize(tabela)
     hoje = date.today().strftime("%Y%m%d")
@@ -35,7 +35,7 @@ def salvar(tabela):
     return destino
 
 
-def registrar(destino, tabela):
+def registrar(destino, tabela): #faz o proveniencia salvando as informacoes de onde vieram os dados
     info = {
         "fonte": URL,
         "arquivo_bronze": destino.name,

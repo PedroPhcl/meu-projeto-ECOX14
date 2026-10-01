@@ -20,7 +20,7 @@ def chave_texto(serie):
     return s.str.decode("utf-8")
 
 
-def aplicar_mapa(serie, mapa):
+def aplicar_mapa(serie, mapa): #Manchester city vira man city (normalizacao)
     """Troca variantes pelo valor canonico.
     O que nao estiver no mapa fica como esta."""
     return serie.replace(mapa)
