@@ -20,12 +20,6 @@ def carregar(): #le o CSV mais recente da bronze
     print(df.isna().sum())
     return df, caminho
 
-def tirar_espacos(df):
-    df.columns = df.columns.str.strip()
-    for coluna in df.select_dtypes(include="object"):
-        df[coluna] = df[coluna].str.strip()
-    return df
-
 def separar_premier_league(df):
     e_premier = df["Div"] == "E0"
     print("premier league:", e_premier.sum())
