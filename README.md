@@ -25,7 +25,7 @@ ao mandante)?
   -- redundância esperada, não é erro.
 - 'Unnamed: 0' é uma coluna de índice residual da exportação (única e
   uniforme, sem informação útil); correlacionada com 'Div' (divisão).
-  Removida na camada prata.
+  Candidata a remoção: ainda presente na prata.
 - HTHG, HTAG, FTHG e FTAG têm muitos zeros (23% a 61%) -- comportamento
   esperado do futebol (times fazem 0 gol com frequência, especialmente no
   intervalo), não é defeito da fonte.
@@ -95,3 +95,50 @@ continuam nos scripts de cada fonte, pois são específicos dela.
 ## Correção
 A função `tirar_espacos` foi criada na aula de limpeza mas nunca tinha 
 sido chamada na main, foi corrigido nesta aula.
+
+## Enriquecimento (junção de fontes)
+
+Duas tabelas foram juntadas à prata de odds (grão: 1 linha por jogo, 760 linhas).
+Nenhum dado novo é criado: a informação já existia em outra tabela.
+
+### Classificação calculada dos próprios jogos (junção principal)
+A fonte TheSportsDB só entrega 5 times e só a temporada 2024/25, que não existe
+nas odds (2021/22 e 2022/23). Por isso `src/calcular_classificacao.py` monta a
+classificação final de cada temporada a partir dos 760 jogos (3 pontos por
+vitória, 1 por empate; desempate por saldo de gols e depois gols marcados).
+Resultado: 40 linhas (20 times x 2 temporadas). Conferência com o mundo real:
+Man City 93 pts e Liverpool 92 em 2021/22; Man City 89 pts e Arsenal 84 em 2022/23.
+
+- Tabelas: odds (1 linha por jogo) x classificação calculada (1 linha por time e temporada).
+- Chave: (Temporada, chave_time), uma vez para o mandante e outra para o visitante.
+- Tipo: `how="left"` com `validate="many_to_one"`.
+- Contagem: esquerda 760, resultado 760, sem par 0 (nos dois lados).
+- Limite: as duas tabelas vêm da mesma fonte de odds, então o casamento total já era esperado.
+  A posição é a final da temporada e inclui o próprio jogo; serve para agrupar favoritismo,
+  não como informação disponível antes da partida.
+
+### Classificação do TheSportsDB (junção demonstrativa)
+- Chave: `chave_time` do mandante. `how="left"`, `validate="many_to_one"`.
+- Contagem: esquerda 760, resultado 760, sem par 570. Casaram 190 jogos (5 times x 19 jogos em casa x 2 temporadas).
+- As colunas `tsdb_pos_2425_casa` e `tsdb_pontos_2425_casa` trazem a posição de 2024/25,
+  então não descrevem a temporada do jogo. Ficam na tabela só como demonstração e **não entram na análise**.
+
+### Quem não casou
+- **Calculada:** ninguém. As chaves vieram da mesma fonte (40 de 40).
+- **TheSportsDB, 18 times do mandante, 570 jogos:** Aston Villa, Bournemouth, Brentford,
+  Brighton, Burnley, Crystal Palace, Everton, Fulham, Leeds, Leicester, Man United,
+  Norwich, Nott'm Forest, Southampton, Tottenham, Watford, West Ham e Wolves.
+  Motivo: universo diferente. A chave gratuita da API devolve só os 5 primeiros colocados de 2024/25.
+  Não é erro de grafia e não se resolve com mapa de sinônimos; está documentado como limitação.
+
+### Atributos que só existem depois da junção
+- `posicao_casa`, `posicao_visitante`, `pontos_casa`, `pontos_visitante`, `saldo_gols_casa`, `saldo_gols_visitante`.
+- `dif_posicao` = posição do visitante menos a do mandante (positivo: mandante melhor posicionado).
+- `dif_pontos` e `mandante_melhor_posicionado`.
+- Ligação com a pergunta norteadora: permite checar se a probabilidade implícita do mandante
+  se mantém calibrada dentro de cada faixa de força relativa dos times, e não só por quartil de odd.
+
+Os scripts rodam nesta ordem: `transformar_futebol.py`, `transformar_classificacao.py`,
+`calcular_classificacao.py`, `enriquecer.py`. O resultado é `dados/prata/odds_enriquecido.parquet`
+(760 linhas, 49 colunas).
+
