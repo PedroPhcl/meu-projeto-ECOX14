@@ -11,19 +11,19 @@ Grao do resultado: 1 linha por jogo (o mesmo das odds).
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
+import config
 import limpeza
 
-PRATA = Path("dados/prata")
+PRATA = config.PRATA
 
 
 def carregar():
-    odds = pd.read_parquet(PRATA / "odds_futebol.parquet")
-    calculada = pd.read_parquet(PRATA / "classificacao_calculada.parquet")
-    tsdb = pd.read_parquet(PRATA / "classificacao.parquet")
+    odds = pd.read_parquet(config.PRATA_ODDS)
+    calculada = pd.read_parquet(config.PRATA_CLASSIFICACAO_CALCULADA)
+    tsdb = pd.read_parquet(config.PRATA_CLASSIFICACAO)
     print("odds      :", odds.shape, "(1 linha por jogo)")
     print("calculada :", calculada.shape, "(1 linha por time e temporada)")
     print("tsdb      :", tsdb.shape, "(1 linha por time, so 2024/25)")
@@ -112,7 +112,7 @@ def criar_atributos_pos_juncao(df):
 
 
 def salvar(df):
-    destino = PRATA / "odds_enriquecido.parquet"
+    destino = config.PRATA_ENRIQUECIDO
     df.to_parquet(destino, index=False)
     print("salvo em:", destino, df.shape)
     return destino
@@ -128,7 +128,7 @@ def registrar(destino, antes, depois, decisoes):
         "decisoes": decisoes,
         "transformado_em": datetime.now().isoformat(timespec="seconds"),
     }
-    with (PRATA / "proveniencia.jsonl").open("a", encoding="utf-8") as f:
+    with config.PRATA_PROVENIENCIA.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
 

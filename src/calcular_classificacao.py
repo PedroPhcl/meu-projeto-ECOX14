@@ -7,14 +7,14 @@ Grao do resultado: 1 linha por time e temporada.
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
+import config
 import limpeza
 
-PRATA = Path("dados/prata")
-ENTRADA = PRATA / "odds_futebol.parquet"
+PRATA = config.PRATA
+ENTRADA = config.PRATA_ODDS
 
 
 def carregar():
@@ -91,7 +91,7 @@ def conferir(tabela):
 
 def salvar(tabela):
     PRATA.mkdir(parents=True, exist_ok=True)
-    destino = PRATA / "classificacao_calculada.parquet"
+    destino = config.PRATA_CLASSIFICACAO_CALCULADA
     tabela.to_parquet(destino, index=False)
     print("salvo em:", destino, tabela.shape)
     return destino
@@ -106,7 +106,7 @@ def registrar(destino, antes, depois, decisoes):
         "decisoes": decisoes,
         "transformado_em": datetime.now().isoformat(timespec="seconds"),
     }
-    with (PRATA / "proveniencia.jsonl").open("a", encoding="utf-8") as f:
+    with config.PRATA_PROVENIENCIA.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
 

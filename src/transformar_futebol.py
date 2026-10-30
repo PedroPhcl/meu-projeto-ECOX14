@@ -1,13 +1,14 @@
 import json
-import limpeza
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
-BRONZE = Path("dados/bronze/futebol")
-PRATA = Path("dados/prata")
-PADRAO = "odds_*.csv"
+import config
+import limpeza
+
+BRONZE = config.BRONZE_ODDS
+PRATA = config.PRATA
+PADRAO = config.PADRAO_ODDS
 
 def carregar(): #le o CSV mais recente da bronze
     arquivos = sorted(BRONZE.glob(PADRAO))
@@ -21,7 +22,7 @@ def carregar(): #le o CSV mais recente da bronze
     return df, caminho
 
 def separar_premier_league(df):
-    e_premier = df["Div"] == "E0"
+    e_premier = df["Div"] == config.DIVISAO
     print("premier league:", e_premier.sum())
     print("outras ligas  :", (~e_premier).sum())
     return df[e_premier].copy()
@@ -34,7 +35,7 @@ def calcular_temporada(df):
     df["Temporada"] = ano_temporada.astype(str) + "/" + (ano_temporada + 1).astype(str).str[-2:]
     return df
 
-def separar_ultimas_temporadas(df, n=2):
+def separar_ultimas_temporadas(df, n=config.N_TEMPORADAS):
     temporadas_recentes = sorted(df["Temporada"].unique())[-n:]
     print("temporadas mantidas:", temporadas_recentes)
     e_recente = df["Temporada"].isin(temporadas_recentes)
@@ -76,7 +77,7 @@ def marcar_extremos(df, coluna): #usa IQR para marcar
     return df
 
 
-def marcar_zscore(df, coluna, limite=3): #marca extremos usando desvio padrao
+def marcar_zscore(df, coluna, limite=config.Z_LIMITE): #marca extremos usando desvio padrao
     z = (df[coluna] - df[coluna].mean()) / df[coluna].std()
     df[coluna + "_z"] = z.abs() > limite
     print(coluna, "z acima de", limite, ":",
@@ -97,7 +98,7 @@ def faixa_probabilidade(df, coluna, n_faixas=4): #agrupa os jogos nos 4 quartis
 
 def salvar(df): #salva em .parquet
     PRATA.mkdir(parents=True, exist_ok=True)
-    destino = PRATA / "odds_futebol.parquet"
+    destino = config.PRATA_ODDS
     df.to_parquet(destino, index=False)
     print("salvo em:", destino, df.shape)
     return destino
@@ -111,7 +112,7 @@ def registrar(origem, destino, antes, depois, decisoes):
         "decisoes": decisoes,
         "transformado_em": datetime.now().isoformat(timespec="seconds"),
     }
-    caminho = PRATA / "proveniencia.jsonl"
+    caminho = config.PRATA_PROVENIENCIA
     with caminho.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
