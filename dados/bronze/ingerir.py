@@ -3,21 +3,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import config  # noqa: E402
+import logging  # noqa: E402
+
 import kagglehub  # noqa: E402
 
 DATASET = config.DATASET_KAGGLE
 BRONZE = config.BRONZE_ODDS
 
+log = logging.getLogger(__name__)
+
 def baixar():
     pasta = kagglehub.dataset_download(DATASET)
-    print("baixado em:", pasta)
+    log.info("baixado em: %s", pasta)
     return Path(pasta)
 
 def localizar(pasta):
     arquivos = list(pasta.glob("*.csv"))
     if not arquivos:
         raise FileNotFoundError("nenhum CSV")
-    print("encontrados:", [a.name for a in arquivos])
+    log.info("encontrados: %s", [a.name for a in arquivos])
     return arquivos[0]
 
 from datetime import date
@@ -49,4 +53,5 @@ def main():
     registrar(origem, destino)
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()

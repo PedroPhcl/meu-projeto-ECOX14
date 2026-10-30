@@ -6,6 +6,7 @@ Grao do resultado: 1 linha por time e temporada.
 """
 
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -16,10 +17,12 @@ import limpeza
 PRATA = config.PRATA
 ENTRADA = config.PRATA_ODDS
 
+log = logging.getLogger(__name__)
+
 
 def carregar():
     df = pd.read_parquet(ENTRADA)
-    print("lido:", ENTRADA.name, df.shape)
+    log.info("lido: %s %s", ENTRADA.name, df.shape)
     return df
 
 
@@ -76,16 +79,19 @@ def criar_chave(tabela):
 
 
 def conferir(tabela):
-    print("linhas (time x temporada):", len(tabela))
-    print("times por temporada:")
-    print(tabela.groupby("Temporada")["time"].nunique().to_string())
-    print("jogos por time (min/max):",
-          tabela["jogos"].min(), "/", tabela["jogos"].max())
+    log.info("linhas (time x temporada): %d", len(tabela))
+    por_temporada = tabela.groupby("Temporada")["time"].nunique()
+    log.info("times por temporada: %s", por_temporada.to_dict())
+    log.info("jogos por time (min/max): %d / %d",
+             tabela["jogos"].min(), tabela["jogos"].max())
     for temp, grupo in tabela.groupby("Temporada"):
         lider = grupo.iloc[0]
-        print(f"  {temp}: 1o {lider['time']} com {lider['pontos']} pts")
+        log.info("%s: 1o %s com %d pts", temp, lider["time"], lider["pontos"])
     repetidas = tabela.duplicated(["Temporada", "chave_time"]).sum()
-    print("chaves (temporada, time) repetidas:", repetidas)
+    if repetidas:
+        log.warning("chaves (temporada, time) repetidas: %d", repetidas)
+    else:
+        log.info("chaves (temporada, time) repetidas: 0")
     return tabela
 
 
@@ -93,7 +99,7 @@ def salvar(tabela):
     PRATA.mkdir(parents=True, exist_ok=True)
     destino = config.PRATA_CLASSIFICACAO_CALCULADA
     tabela.to_parquet(destino, index=False)
-    print("salvo em:", destino, tabela.shape)
+    log.info("salvo em: %s %s", destino, tabela.shape)
     return destino
 
 
@@ -128,4 +134,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()

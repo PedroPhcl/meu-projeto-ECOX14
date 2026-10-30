@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -10,21 +11,23 @@ BRONZE = config.BRONZE_ODDS
 PRATA = config.PRATA
 PADRAO = config.PADRAO_ODDS
 
+log = logging.getLogger(__name__)
+
 def carregar(): #le o CSV mais recente da bronze
     arquivos = sorted(BRONZE.glob(PADRAO))
     if not arquivos:
         raise FileNotFoundError(f"nada em {BRONZE}")
     caminho = arquivos[-1]
     df = pd.read_csv(caminho)
-    print("lido:", caminho.name, df.shape)
-    print(df.columns.tolist())
-    print(df.isna().sum())
+    log.info("lido: %s %s", caminho.name, df.shape)
+    log.debug("colunas: %s", df.columns.tolist())
+    log.debug("nulos por coluna:\n%s", df.isna().sum())
     return df, caminho
 
 def separar_premier_league(df):
     e_premier = df["Div"] == config.DIVISAO
-    print("premier league:", e_premier.sum())
-    print("outras ligas  :", (~e_premier).sum())
+    log.info("premier league: %d | outras ligas: %d",
+             e_premier.sum(), (~e_premier).sum())
     return df[e_premier].copy()
 
 def calcular_temporada(df): 
@@ -37,17 +40,19 @@ def calcular_temporada(df):
 
 def separar_ultimas_temporadas(df, n=config.N_TEMPORADAS):
     temporadas_recentes = sorted(df["Temporada"].unique())[-n:]
-    print("temporadas mantidas:", temporadas_recentes)
+    log.info("temporadas mantidas: %s", temporadas_recentes)
     e_recente = df["Temporada"].isin(temporadas_recentes)
-    print("jogos mantidos :", e_recente.sum())
-    print("jogos descartados:", (~e_recente).sum())
+    log.info("jogos mantidos: %d | descartados: %d",
+             e_recente.sum(), (~e_recente).sum())
     return df[e_recente].copy()
 
 def conferir_chave(df, chave="Unique_ID"):
     repetidas = df[chave].duplicated().sum()
-    print("chaves repetidas:", repetidas)
     if repetidas:
-        print(df[df[chave].duplicated(keep=False)])
+        log.warning("chaves repetidas: %d (mantida a primeira de cada)", repetidas)
+        log.debug("linhas repetidas:\n%s", df[df[chave].duplicated(keep=False)])
+    else:
+        log.info("chaves repetidas: 0")
     return df.drop_duplicates(subset=chave)
 
 def converter_tipos(df):
@@ -58,8 +63,12 @@ def converter_tipos(df):
         "WHH", "WHD", "WHA",
         "VCH", "VCD", "VCA",
     ]
+    antes = df[colunas_odds].isna().sum().sum()
     for coluna in colunas_odds:
         df[coluna] = pd.to_numeric(df[coluna], errors="coerce")
+    novos = df[colunas_odds].isna().sum().sum() - antes
+    if novos:
+        log.warning("%d valores de odds viraram NaN na conversao", novos)
     return df
 
 def limites_iqr(serie): #calcula os limites usando quartis
@@ -73,15 +82,15 @@ def marcar_extremos(df, coluna): #usa IQR para marcar
     baixo, alto = limites_iqr(df[coluna])
     df[coluna + "_extremo"] = (
         (df[coluna] < baixo) | (df[coluna] > alto))
-    print(coluna, df[coluna + "_extremo"].sum())
+    log.info("%s extremos por IQR: %d", coluna, df[coluna + "_extremo"].sum())
     return df
 
 
 def marcar_zscore(df, coluna, limite=config.Z_LIMITE): #marca extremos usando desvio padrao
     z = (df[coluna] - df[coluna].mean()) / df[coluna].std()
     df[coluna + "_z"] = z.abs() > limite
-    print(coluna, "z acima de", limite, ":",
-          df[coluna + "_z"].sum())
+    log.info("%s extremos por z-score (limite %s): %d",
+             coluna, limite, df[coluna + "_z"].sum())
     return df
 
 def calcular_probabilidade_implicita(df): #1/odd vira valor do mercado
@@ -100,7 +109,7 @@ def salvar(df): #salva em .parquet
     PRATA.mkdir(parents=True, exist_ok=True)
     destino = config.PRATA_ODDS
     df.to_parquet(destino, index=False)
-    print("salvo em:", destino, df.shape)
+    log.info("salvo em: %s %s", destino, df.shape)
     return destino
 
 def registrar(origem, destino, antes, depois, decisoes):
@@ -124,7 +133,7 @@ def main():
     df = separar_premier_league(df)
     df = calcular_temporada(df)
     df = separar_ultimas_temporadas(df)
-    print(sorted(df["HomeTeam"].unique()))
+    log.debug("times: %s", sorted(df["HomeTeam"].unique()))
     df = conferir_chave(df)
     df = converter_tipos(df)
     df = calcular_probabilidade_implicita(df)
@@ -146,4 +155,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()

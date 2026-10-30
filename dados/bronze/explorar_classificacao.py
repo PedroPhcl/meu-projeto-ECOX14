@@ -3,12 +3,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import config  # noqa: E402
+import logging  # noqa: E402
+
 import pandas as pd  # noqa: E402
 from data_profiling import ProfileReport  # noqa: E402
 
 BRONZE = config.BRONZE_CLASSIFICACAO
 PADRAO = config.PADRAO_CLASSIFICACAO
 RELATORIOS = config.RELATORIOS
+
+log = logging.getLogger(__name__)
 
 
 def mais_recente():
@@ -29,9 +33,10 @@ def gerar(caminho):
 
 def main():
     caminho = mais_recente()
-    print("perfilando:", caminho.name)
-    print(gerar(caminho))
+    log.info("perfilando: %s", caminho.name)
+    log.info("relatorio gerado: %s", gerar(caminho))
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()
