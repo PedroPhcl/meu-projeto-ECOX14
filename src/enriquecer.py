@@ -10,6 +10,7 @@ Grao do resultado: 1 linha por jogo (o mesmo das odds).
 """
 
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -19,14 +20,16 @@ import limpeza
 
 PRATA = config.PRATA
 
+log = logging.getLogger(__name__)
+
 
 def carregar():
     odds = pd.read_parquet(config.PRATA_ODDS)
     calculada = pd.read_parquet(config.PRATA_CLASSIFICACAO_CALCULADA)
     tsdb = pd.read_parquet(config.PRATA_CLASSIFICACAO)
-    print("odds      :", odds.shape, "(1 linha por jogo)")
-    print("calculada :", calculada.shape, "(1 linha por time e temporada)")
-    print("tsdb      :", tsdb.shape, "(1 linha por time, so 2024/25)")
+    log.info("odds: %s (1 linha por jogo)", odds.shape)
+    log.info("calculada: %s (1 linha por time e temporada)", calculada.shape)
+    log.info("tsdb: %s (1 linha por time, so 2024/25)", tsdb.shape)
     return odds, calculada, tsdb
 
 
@@ -40,19 +43,20 @@ def conferir_chaves(esquerda, direita, nome):
     """Passo 1 da aula: preve o que a juncao vai fazer, antes de juntar."""
     so_esq = esquerda - direita
     so_dir = direita - esquerda
-    print(f"chaves [{nome}] so nas odds: {len(so_esq)} | "
-          f"so na classificacao: {len(so_dir)} | nos dois: "
-          f"{len(esquerda & direita)}")
+    log.info("chaves [%s] so nas odds: %d | so na classificacao: %d | nos dois: %d",
+             nome, len(so_esq), len(so_dir), len(esquerda & direita))
     return so_esq, so_dir
 
 
 def validar(esquerda, resultado, coluna_nova, nome):
     """Passo 3 da aula: a contagem antes e depois precisa fechar."""
     sem_par = resultado[coluna_nova].isna()
-    print(f"[{nome}] esquerda: {len(esquerda)} | resultado: {len(resultado)}"
-          f" | sem par: {int(sem_par.sum())}")
     if len(resultado) != len(esquerda):
         raise ValueError(f"[{nome}] o numero de linhas mudou: o grao mudou")
+    log.info("[%s] esquerda: %d | resultado: %d | sem par: %d",
+             nome, len(esquerda), len(resultado), sem_par.sum())
+    if sem_par.any():
+        log.warning("[%s] %d linhas sem par", nome, sem_par.sum())
     return resultado[sem_par]
 
 
@@ -66,6 +70,7 @@ def juntar_calculada(odds, calculada):
     conferir_chaves(chaves_odds, chaves_tab, "calculada")
 
     resultado = odds
+    sem_par = {}
     for lado, chave in (("casa", "chave_casa"), ("visitante", "chave_visitante")):
         renomear = {
             "chave_time": chave,
@@ -79,8 +84,9 @@ def juntar_calculada(odds, calculada):
             how="left",
             validate="many_to_one",
         )
-        sem_par = validar(odds, resultado, f"posicao_{lado}", f"calculada/{lado}")
-    return resultado, sem_par
+        sem_par[lado] = validar(odds, resultado, f"posicao_{lado}",
+                                f"calculada/{lado}")
+    return resultado, sem_par["casa"], sem_par["visitante"]
 
 
 def juntar_tsdb(odds, tsdb):
@@ -97,10 +103,12 @@ def juntar_tsdb(odds, tsdb):
     return resultado, sem_par
 
 
-def descrever_nao_casados(sem_par, nome):
-    times = sorted(sem_par["HomeTeam"].unique())
-    print(f"[{nome}] times do mandante que ficaram sem par ({len(times)}):")
-    print("  ", ", ".join(times) if times else "nenhum")
+def descrever_nao_casados(sem_par, nome, coluna="HomeTeam"):
+    times = sorted(sem_par[coluna].unique())
+    if times:
+        log.info("[%s] times sem par (%d): %s", nome, len(times), ", ".join(times))
+    else:
+        log.info("[%s] todos os times tiveram par", nome)
 
 
 def criar_atributos_pos_juncao(df):
@@ -114,7 +122,7 @@ def criar_atributos_pos_juncao(df):
 def salvar(df):
     destino = config.PRATA_ENRIQUECIDO
     df.to_parquet(destino, index=False)
-    print("salvo em:", destino, df.shape)
+    log.info("salvo em: %s %s", destino, df.shape)
     return destino
 
 
@@ -137,8 +145,9 @@ def main():
     antes = len(odds)
     odds = criar_chaves(odds)
 
-    df, sem_par_calc = juntar_calculada(odds, calculada)
-    descrever_nao_casados(sem_par_calc, "calculada/visitante")
+    df, sem_casa, sem_visitante = juntar_calculada(odds, calculada)
+    descrever_nao_casados(sem_casa, "calculada/casa", "HomeTeam")
+    descrever_nao_casados(sem_visitante, "calculada/visitante", "AwayTeam")
 
     df, sem_par_tsdb = juntar_tsdb(df, tsdb)
     descrever_nao_casados(sem_par_tsdb, "tsdb")
@@ -157,4 +166,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()

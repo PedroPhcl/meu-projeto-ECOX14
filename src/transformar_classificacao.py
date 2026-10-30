@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -9,6 +10,8 @@ import limpeza
 BRONZE = config.BRONZE_CLASSIFICACAO
 PRATA = config.PRATA
 PADRAO = config.PADRAO_CLASSIFICACAO
+
+log = logging.getLogger(__name__)
 
 # mapa de sinonimos especifico desta fonte -- fica aqui, nao no modulo
 MAPA_TIMES = {
@@ -23,7 +26,7 @@ def carregar():
         raise FileNotFoundError(f"nada em {BRONZE}")
     caminho = arquivos[-1]
     df = pd.read_csv(caminho)
-    print("lido:", caminho.name, df.shape)
+    log.info("lido: %s %s", caminho.name, df.shape)
     return df, caminho
 
 
@@ -31,7 +34,7 @@ def remover_colunas_vazias(df):
     colunas = ["idLeague", "strLeague", "strSeason", "strDescription",
                "intPlayed", "dateUpdated", "strGroup", "strBadge", "strForm"]
     existentes = [c for c in colunas if c in df.columns]
-    print("colunas removidas:", existentes)
+    log.debug("colunas removidas: %s", existentes)
     return df.drop(columns=existentes)
 
 
@@ -55,7 +58,7 @@ def salvar(df):
     PRATA.mkdir(parents=True, exist_ok=True)
     destino = config.PRATA_CLASSIFICACAO
     df.to_parquet(destino, index=False)
-    print("salvo em:", destino, df.shape)
+    log.info("salvo em: %s %s", destino, df.shape)
     return destino
 
 
@@ -92,4 +95,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()

@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import config  # noqa: E402
 import json  # noqa: E402
+import logging  # noqa: E402
 from datetime import date, datetime  # noqa: E402
 
 import pandas as pd  # noqa: E402
@@ -11,6 +12,8 @@ import requests  # noqa: E402
 
 URL = config.URL_CLASSIFICACAO
 BRONZE = config.BRONZE_CLASSIFICACAO
+
+log = logging.getLogger(__name__)
 
 
 def buscar(): #puxa a tabela da PL
@@ -26,8 +29,8 @@ def conferir(dados): #confere chave e lista os times que vieram
     tabela = dados.get("table")
     if not tabela:
         raise ValueError("resposta veio sem 'table' -- confira parametros l/s")
-    print("times na tabela:", len(tabela))
-    print("exemplo:", tabela[0]["strTeam"], "-> posicao", tabela[0]["intRank"])
+    log.info("times na tabela: %d", len(tabela))
+    log.debug("exemplo: %s -> posicao %s", tabela[0]["strTeam"], tabela[0]["intRank"])
     return tabela
 
 
@@ -59,4 +62,5 @@ def main():
 
 
 if __name__ == "__main__":
+    config.configurar_log()
     main()
