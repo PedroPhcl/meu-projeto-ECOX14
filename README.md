@@ -138,7 +138,70 @@ Man City 93 pts e Liverpool 92 em 2021/22; Man City 89 pts e Arsenal 84 em 2022/
 - Ligação com a pergunta norteadora: permite checar se a probabilidade implícita do mandante
   se mantém calibrada dentro de cada faixa de força relativa dos times, e não só por quartil de odd.
 
-Os scripts rodam nesta ordem: `transformar_futebol.py`, `transformar_classificacao.py`,
-`calcular_classificacao.py`, `enriquecer.py`. O resultado é `dados/prata/odds_enriquecido.parquet`
-(760 linhas, 49 colunas).
+O resultado do enriquecimento é `dados/prata/odds_enriquecido.parquet` (760 linhas, 49 colunas).
+
+## Como executar
+
+A partir de qualquer pasta, com o ambiente virtual ativo e o `kaggle.json` configurado:
+
+```
+python src/pipeline.py                  # roda tudo
+python src/pipeline.py transformacao    # retoma a partir de uma etapa
+```
+
+| Etapa | O que faz | Scripts |
+|---|---|---|
+| `ingestao` | baixa as duas fontes para a bronze | `dados/bronze/ingerir.py`, `dados/bronze/ingerir_classificacao.py` |
+| `transformacao` | bronze → prata e classificação calculada | `transformar_futebol.py`, `transformar_classificacao.py`, `calcular_classificacao.py` |
+| `enriquecimento` | junta as tabelas da prata | `enriquecer.py` |
+| `carga` | ainda não implementada | — |
+| `modelagem` | ainda não implementada | — |
+
+Etapas ainda não implementadas aparecem no log como aviso, em vez de ficarem escondidas.
+A retomada existe porque a ingestão bate nas fontes de novo e demora: se o erro está no
+enriquecimento, não há motivo para baixar tudo outra vez. Cada script também roda sozinho
+(`python src/enriquecer.py`), e a ordem entre eles está na tabela acima.
+
+Os scripts de ingestão continuam em `dados/bronze/`, junto da camada que alimentam
+(decisão tomada na Aula 3). O `pipeline.py` adiciona essa pasta ao caminho de importação
+só ao rodar a ingestão.
+
+## Configuração (`src/config.py`)
+
+Caminhos de pasta, padrões de nome dos arquivos datados e parâmetros ficam em um lugar só.
+O teste usado para decidir o que entra ali: se outra pessoa fosse rodar o projeto em outra
+máquina ou com outra temporada, quais linhas ela precisaria editar?
+
+- **Caminhos:** `RAIZ` é calculada a partir do próprio arquivo, então rodar de dentro de
+  `src/` ou de qualquer outra pasta não quebra o caminho dos dados.
+- **Parâmetros:** `DIVISAO` (E0 = Premier League), `N_TEMPORADAS` (2), `Z_LIMITE` (3),
+  `ID_LIGA` e `TEMPORADA_API` da TheSportsDB, `DATASET_KAGGLE`.
+- **Fora do config:** lógica de transformação e segredos. O token do Kaggle fica no
+  `kaggle.json`, que está no `.gitignore`.
+
+## Log (`pipeline.log`)
+
+Os `print` foram trocados por `logging`. Cada mensagem sai na tela e no arquivo
+`pipeline.log` (ignorado pelo Git), com hora, nível e módulo.
+
+| Nível | Uso neste projeto |
+|---|---|
+| DEBUG | detalhe para investigar: colunas lidas, nulos por coluna, lista de times |
+| INFO | o que se vai querer saber depois: linhas lidas, mantidas, descartadas, arquivo salvo |
+| WARNING | estranho, mas seguiu: linhas sem par numa junção, odds que viraram NaN, chave repetida |
+| ERROR | não deu para continuar |
+
+Exemplo real: na junção com o TheSportsDB o log registra `WARNING [tsdb/casa] 570 linhas sem par`
+e o pipeline segue, porque essa limitação já está documentada. Já uma junção que mudasse o
+número de linhas (o grão) levanta erro e interrompe a etapa. Quando uma etapa falha, o
+pipeline grava o rastro completo do erro no log, devolve o erro e não segue para a etapa
+seguinte com dado pela metade.
+
+## O que este pipeline não faz
+
+O `pipeline.py` é um ponto de entrada, não um orquestrador. Não agenda a execução, não tenta
+de novo sozinho, não avisa ninguém quando falha, não roda etapas em paralelo e não reprocessa
+períodos passados. Para este projeto, rodar com as mãos está certo; um orquestrador só valeria
+se alguma dessas necessidades aparecesse de verdade, e manter um (banco de metadados, agendador
+e servidor web) é trabalho contínuo.
 
