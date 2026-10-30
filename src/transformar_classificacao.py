@@ -1,14 +1,14 @@
 import json
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
+import config
 import limpeza
 
-BRONZE = Path("dados/bronze/classificacao")
-PRATA = Path("dados/prata")
-PADRAO = "classificacao_*.csv"
+BRONZE = config.BRONZE_CLASSIFICACAO
+PRATA = config.PRATA
+PADRAO = config.PADRAO_CLASSIFICACAO
 
 # mapa de sinonimos especifico desta fonte -- fica aqui, nao no modulo
 MAPA_TIMES = {
@@ -53,7 +53,7 @@ def converter_tipos(df):
 
 def salvar(df):
     PRATA.mkdir(parents=True, exist_ok=True)
-    destino = PRATA / "classificacao.parquet"
+    destino = config.PRATA_CLASSIFICACAO
     df.to_parquet(destino, index=False)
     print("salvo em:", destino, df.shape)
     return destino
@@ -68,7 +68,7 @@ def registrar(origem, destino, antes, depois, decisoes):
         "decisoes": decisoes,
         "transformado_em": datetime.now().isoformat(timespec="seconds"),
     }
-    caminho = PRATA / "proveniencia.jsonl"
+    caminho = config.PRATA_PROVENIENCIA
     with caminho.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
 

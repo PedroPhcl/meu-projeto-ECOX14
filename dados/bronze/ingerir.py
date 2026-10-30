@@ -1,8 +1,12 @@
+import sys
 from pathlib import Path
-import kagglehub
 
-DATASET = "ahmadasadi00/football-betting-odds"
-BRONZE = Path("dados/bronze/futebol")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+import config  # noqa: E402
+import kagglehub  # noqa: E402
+
+DATASET = config.DATASET_KAGGLE
+BRONZE = config.BRONZE_ODDS
 
 def baixar():
     pasta = kagglehub.dataset_download(DATASET)

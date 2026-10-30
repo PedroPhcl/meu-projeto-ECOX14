@@ -1,17 +1,22 @@
-import requests
-import pandas as pd
+import sys
 from pathlib import Path
-from datetime import date, datetime
-import json
 
-URL = "https://www.thesportsdb.com/api/v1/json/123/lookuptable.php"
-BRONZE = Path("dados/bronze/classificacao")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+import config  # noqa: E402
+import json  # noqa: E402
+from datetime import date, datetime  # noqa: E402
+
+import pandas as pd  # noqa: E402
+import requests  # noqa: E402
+
+URL = config.URL_CLASSIFICACAO
+BRONZE = config.BRONZE_CLASSIFICACAO
 
 
 def buscar(): #puxa a tabela da PL
     r = requests.get(URL, params={
-        "l": "4328",           # id da Premier League na TheSportsDB
-        "s": "2024-2025"       # temporada
+        "l": config.ID_LIGA,             # id da Premier League na TheSportsDB
+        "s": config.TEMPORADA_API,       # temporada
     }, timeout=30)
     r.raise_for_status()
     return r.json()

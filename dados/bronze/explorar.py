@@ -1,10 +1,14 @@
+import sys
 from pathlib import Path
-import pandas as pd
-from data_profiling import ProfileReport
 
-BRONZE = Path("dados/bronze/futebol")
-PADRAO = "odds_*.csv"
-RELATORIOS = Path("relatorios")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+import config  # noqa: E402
+import pandas as pd  # noqa: E402
+from data_profiling import ProfileReport  # noqa: E402
+
+BRONZE = config.BRONZE_ODDS
+PADRAO = config.PADRAO_ODDS
+RELATORIOS = config.RELATORIOS
 
 
 def mais_recente(): #procura o arquivo mais recente
@@ -17,7 +21,7 @@ def mais_recente(): #procura o arquivo mais recente
 def gerar(caminho): #le o CSV e envia pra biblioteca que calcula estats e outros
     df = pd.read_csv(caminho)
     perfil = ProfileReport(df, title=caminho.name)
-    RELATORIOS.mkdir(exist_ok=True)
+    RELATORIOS.mkdir(parents=True, exist_ok=True)
     saida = RELATORIOS / f"{caminho.stem}.html"
     perfil.to_file(saida)
     return saida
