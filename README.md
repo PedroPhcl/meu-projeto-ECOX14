@@ -154,10 +154,10 @@ python src/pipeline.py transformacao    # retoma a partir de uma etapa
 | `ingestao` | baixa as duas fontes para a bronze | `dados/bronze/ingerir.py`, `dados/bronze/ingerir_classificacao.py` |
 | `transformacao` | bronze → prata e classificação calculada | `transformar_futebol.py`, `transformar_classificacao.py`, `calcular_classificacao.py` |
 | `enriquecimento` | junta as tabelas da prata | `enriquecer.py` |
-| `carga` | ainda não implementada | — |
+| `carga` | carrega a prata no DuckDB e constrói a ouro | `carga.py` |
 | `modelagem` | ainda não implementada | — |
 
-Etapas ainda não implementadas aparecem no log como aviso, em vez de ficarem escondidas.
+Etapas ainda não implementadas (hoje, só a `modelagem`) aparecem no log como aviso, em vez de ficarem escondidas.
 A retomada existe porque a ingestão bate nas fontes de novo e demora: se o erro está no
 enriquecimento, não há motivo para baixar tudo outra vez. Cada script também roda sozinho
 (`python src/enriquecer.py`), e a ordem entre eles está na tabela acima.
@@ -205,3 +205,108 @@ períodos passados. Para este projeto, rodar com as mãos está certo; um orques
 se alguma dessas necessidades aparecesse de verdade, e manter um (banco de metadados, agendador
 e servidor web) é trabalho contínuo.
 
+## Modelagem (camada Ouro)
+
+Modelar não é sobre o dado que existe, é sobre as perguntas que vão ser feitas a ele. As
+perguntas deste projeto:
+
+1. Dentro de cada faixa de probabilidade implícita, a frequência real de vitória do mandante bate com ela?
+2. Isso muda conforme a força relativa dos times (posição na tabela)?
+3. Existe viés sistemático a favor do mandante?
+
+A camada Ouro deixa de ser uma pasta e vira um esquema do banco `dados/ouro/projeto.duckdb`
+(DuckDB: um banco embutido, o banco inteiro é um arquivo). O esquema `prata` recebe os parquets
+como estão; o esquema `ouro` nasce dentro do banco, a partir da prata, escrito em SQL.
+
+### O grão de cada tabela
+
+Escritas antes do `CREATE TABLE`, porque delas decorre o resto:
+
+- **`fato_jogo`: uma linha é uma partida** (um mandante contra um visitante, em uma temporada).
+- **`fato_classificacao`: uma linha é um time em uma temporada.**
+- **`dim_time`: uma linha é um time.**
+
+| Tabela | Natureza | Chave primária | O que pode ser somado | O que é duplicata |
+|---|---|---|---|---|
+| `ouro.fato_jogo` | fato (o que se mede) | `jogo_id` | gols entre jogos; odds e probabilidades só admitem média, nunca soma | o mesmo `jogo_id` duas vezes |
+| `ouro.fato_classificacao` | fato | `(time_id, temporada)`, e não o time sozinho | pontos, gols e jogos entre times; a posição não se soma | o mesmo time na mesma temporada duas vezes |
+| `ouro.dim_time` | dimensão (o que descreve) | `time_id` | nada | o mesmo time duas vezes |
+
+Teste usado para separar: se a resposta é um número que se soma ou se tira média, é fato; se é
+uma palavra pela qual se agrupa ou filtra, é dimensão.
+
+### Como as tabelas se ligam
+
+```
+fato_jogo (uma partida, 760 linhas)
+ |-- time_casa_id ............................> dim_time.time_id
+ |-- time_visitante_id .......................> dim_time.time_id
+ |-- (temporada, time_casa_id) ...............> fato_classificacao (temporada, time_id)
+ `-- (temporada, time_visitante_id) ..........> fato_classificacao (temporada, time_id)
+
+fato_classificacao (um time numa temporada, 40 linhas)
+ `-- time_id .................................> dim_time.time_id
+
+dim_time (um time, 23 linhas)
+```
+
+- `fato_jogo.time_casa_id` e `fato_jogo.time_visitante_id` apontam, os dois, para `dim_time.time_id`
+  (a mesma dimensão desempenha dois papéis: mandante e visitante).
+- `fato_jogo (temporada, time_casa_id)` e `(temporada, time_visitante_id)` apontam para
+  `fato_classificacao (temporada, time_id)`.
+- Não é uma estrela pura: a ligação entre as duas fatos existe para a posição do time não ser
+  copiada dentro de cada jogo. Corrigir uma posição é uma linha em `fato_classificacao`.
+- `time_id` é o `chave_time` (nome sem acento, minúsculo), a mesma chave que já cruzava as fontes.
+
+### Decisões de modelagem
+
+- **Entrada da `fato_jogo`:** `prata.odds_enriquecido`, a tabela da aula de enriquecimento. O join
+  daquela aula não foi exercício: é a entrada da fato. O `WHERE posicao_casa IS NOT NULL AND
+  posicao_visitante IS NOT NULL` é o filtro de integridade (a validação do join virou o filtro
+  da fato). Nenhum jogo é excluído hoje, e a carga avisa se algum for.
+- **Colunas que entram na fato:** identificadores, data, temporada, gols, resultado, odds da
+  Bet365, probabilidades implícitas, faixa e marcação de extremos por IQR.
+- **Colunas que ficam só na prata:** odds das outras casas (correlacionadas com a Bet365, ver
+  defeitos conhecidos), placar do intervalo (não serve às perguntas), `Unnamed: 0` e `Div` (sem
+  informação), marcação por z-score e as colunas `tsdb_*` (são de 2024/25, outra temporada).
+- **Nomes de negócio:** `B365H` vira `odd_casa`, `FTHG` vira `gols_casa`, e `FTR` (H, D, A) vira
+  `resultado` com os valores `casa`, `empate` e `visitante`.
+- **A tabela achatada** da aula de enriquecimento passa a ser a view `ouro.vw_jogo_completo`:
+  não guarda dado, o banco executa o join na hora, então não tem arquivo para manter nem risco
+  de ficar desatualizada. As dimensões entram com `JOIN`; a classificação entra com `LEFT JOIN`,
+  para um jogo sem posição aparecer com nulo em vez de sumir. O `odds_enriquecido.parquet`
+  continua sendo gerado pela etapa de enriquecimento e é a origem da estrela.
+- **Cuidado de interpretação:** a posição vem da classificação **final** da temporada, calculada
+  com os próprios jogos, então inclui o jogo em questão. Serve para agrupar times por força, mas
+  não é informação disponível antes da partida.
+
+### Conferências da carga
+
+A etapa roda 9 consultas que precisam devolver zero, e levanta erro se alguma não devolver:
+grão de cada tabela (nenhuma chave repetida), nenhum fato órfão (todo time da fato existe em
+`dim_time`, todo jogo tem a classificação dos dois times na temporada) e a view não multiplica
+linhas (mesmo número de linhas da `fato_jogo`).
+
+### Como rodar e consultar
+
+```
+python src/pipeline.py carga      # só a carga, a partir da prata que já existe
+python src/carga.py               # a mesma etapa, fora do pipeline
+```
+
+Apagar `dados/ouro/projeto.duckdb` é uma forma legítima de recomeçar do zero: a carga recria
+tudo a partir dos parquets da prata. O banco fica fora do Git (`dados/ouro/*` está no
+`.gitignore`), pelo mesmo motivo da prata: é reproduzível.
+
+Exemplo de consulta (probabilidade implícita contra a frequência real, por faixa):
+
+```sql
+SELECT
+    prob_casa_faixa,
+    COUNT(*)                                                           AS jogos,
+    AVG(prob_casa)                                                     AS prob_implicita_media,
+    AVG(CASE WHEN resultado = 'casa' THEN 1.0 ELSE 0.0 END)            AS freq_vitoria_casa
+FROM ouro.fato_jogo
+GROUP BY prob_casa_faixa
+ORDER BY MIN(prob_casa);
+```
