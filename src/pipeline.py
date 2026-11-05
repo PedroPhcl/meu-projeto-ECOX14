@@ -23,7 +23,8 @@ ETAPAS
     transformacao   bronze -> prata, uma fonte por vez, e depois a
                     classificacao calculada dos proprios jogos
     enriquecimento  junta as tabelas da prata
-    carga           ainda nao implementada
+    carga           carrega a prata no DuckDB e constroi a ouro (esquema
+                    estrela) em SQL, conferindo grao e orfaos
     modelagem       ainda nao implementada
 """
 
@@ -64,11 +65,17 @@ def etapa_enriquecimento():
     enriquecer.main()
 
 
+def etapa_carga():
+    import carga
+
+    carga.main()
+
+
 ETAPAS = [
     ("ingestao", etapa_ingestao),
     ("transformacao", etapa_transformacao),
     ("enriquecimento", etapa_enriquecimento),
-    ("carga", None),        # proximas aulas
+    ("carga", etapa_carga),
     ("modelagem", None),    # proximas aulas
 ]
 
