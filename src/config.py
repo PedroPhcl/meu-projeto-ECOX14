@@ -49,6 +49,9 @@ PRATA_CLASSIFICACAO_CALCULADA = PRATA / "classificacao_calculada.parquet"
 PRATA_ENRIQUECIDO = PRATA / "odds_enriquecido.parquet"
 PRATA_PROVENIENCIA = PRATA / "proveniencia.jsonl"
 
+# Banco da camada ouro (DuckDB): o banco inteiro e este arquivo.
+BANCO = OURO / "projeto.duckdb"
+
 # ---------------------------------------------------------- parametros
 # Fonte primaria (odds)
 DATASET_KAGGLE = "ahmadasadi00/football-betting-odds"
