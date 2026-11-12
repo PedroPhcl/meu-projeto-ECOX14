@@ -1,9 +1,15 @@
 """
-Carga: leva a prata para o DuckDB e constroi a camada ouro em SQL.
+Carga: leva a prata para o DuckDB.
+
+A construcao da ouro era feita aqui, em SQL dentro do Python. Agora e do
+dbt (pasta ecox14/, etapa modelagem do pipeline). Os SQLs e a funcao
+construir_ouro continuam neste arquivo so como referencia da forma antiga.
+A carga segue dona do que nao e transformacao: ler os parquets e abrir o
+banco. As conferencias (conferir_ouro) rodam depois do dbt.
 
 O banco inteiro e um arquivo (config.BANCO). Apagar esse arquivo e uma
-forma legitima de recomecar do zero: a carga recria tudo a partir dos
-parquets da prata.
+forma legitima de recomecar do zero: a carga recria a prata e o dbt
+recria a ouro.
 
 MODELO (as frases do grao e as decisoes estao no README)
 =========================================================
@@ -233,12 +239,23 @@ def main():
     try:
         criar_esquemas(con)
         carregar_prata(con)
-        construir_ouro(con)
-        conferir(con)
+        # construir_ouro(con)   <- agora e o dbt (pasta ecox14/), na etapa
+        #                          modelagem. Fica aqui, comentado, para
+        #                          comparar as duas formas.
     finally:
         # o DuckDB deixa um processo escrever por vez: fechar libera o arquivo
         con.close()
-    log.info("banco pronto em %s", config.BANCO)
+    log.info("prata carregada em %s", config.BANCO)
+
+
+def conferir_ouro():
+    """Roda as conferencias na ouro. Vem depois do dbt, que e quem a cria:
+    antes dele as tabelas ainda nao existem."""
+    con = conectar()
+    try:
+        conferir(con)
+    finally:
+        con.close()
 
 
 if __name__ == "__main__":

@@ -7,3 +7,8 @@ kaggle.json
 relatorios/
 .vscode
 pipeline.log
+
+# dbt
+ecox14/target/
+ecox14/logs/
+ecox14/dbt_packages/
