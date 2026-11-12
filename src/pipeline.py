@@ -23,12 +23,14 @@ ETAPAS
     transformacao   bronze -> prata, uma fonte por vez, e depois a
                     classificacao calculada dos proprios jogos
     enriquecimento  junta as tabelas da prata
-    carga           carrega a prata no DuckDB e constroi a ouro (esquema
-                    estrela) em SQL, conferindo grao e orfaos
-    modelagem       ainda nao implementada
+    carga           carrega a prata no DuckDB (leitura de arquivo, nao e
+                    transformacao)
+    modelagem       dbt constroi a ouro (esquema estrela) a partir da prata
+                    no banco; depois, conferencias de grao e orfaos
 """
 
 import logging
+import subprocess
 import sys
 import time
 
@@ -71,12 +73,30 @@ def etapa_carga():
     carga.main()
 
 
+def etapa_modelagem():
+    import carga
+
+    # check=True faz o Python levantar erro se o dbt falhar. Sem ele, o
+    # pipeline diria que terminou bem com a ouro quebrada.
+    # "python -m dbt.cli.main" usa o dbt do mesmo Python que roda o pipeline,
+    # sem depender do PATH nem do dbt.exe do ambiente virtual.
+    subprocess.run(
+        [sys.executable, "-W", "ignore::RuntimeWarning",
+         "-m", "dbt.cli.main", "run"],
+        cwd=config.RAIZ / "ecox14",
+        check=True,
+    )
+    # A carga ja fechou o banco; o dbt tambem. Agora que a ouro existe,
+    # as conferencias de grao e orfaos fazem sentido.
+    carga.conferir_ouro()
+
+
 ETAPAS = [
     ("ingestao", etapa_ingestao),
     ("transformacao", etapa_transformacao),
     ("enriquecimento", etapa_enriquecimento),
     ("carga", etapa_carga),
-    ("modelagem", None),    # proximas aulas
+    ("modelagem", etapa_modelagem),
 ]
 
 

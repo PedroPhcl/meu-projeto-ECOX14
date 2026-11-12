@@ -1,0 +1,12 @@
+version: 2
+
+# Tabelas que o carga.py leva da prata para o banco. O dbt nao as cria:
+# so aponta para elas e registra de onde o grafo comeca.
+sources:
+  - name: prata
+    schema: prata
+    tables:
+      - name: odds_futebol
+      - name: classificacao
+      - name: classificacao_calculada
+      - name: odds_enriquecido

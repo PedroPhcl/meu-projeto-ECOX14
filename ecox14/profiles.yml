@@ -1,0 +1,13 @@
+# Como o dbt conecta no banco. Fica dentro do repositorio (e nao em
+# ~/.dbt) para o projeto rodar em qualquer maquina sem configuracao extra:
+# o dbt procura primeiro o profiles.yml da pasta onde e executado.
+#
+# O pipeline executa o dbt a partir de ecox14/, entao o caminho abaixo e
+# relativo a essa pasta. Nao ha senha nem segredo aqui.
+ecox14:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../dados/ouro/projeto.duckdb
+      schema: ouro

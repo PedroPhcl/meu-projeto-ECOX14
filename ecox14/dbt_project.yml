@@ -1,0 +1,15 @@
+# Projeto dbt: constroi a camada ouro (esquema estrela) dentro do DuckDB.
+# O dbt nao executa SQL: escreve o SQL de cada modelo e entrega ao banco.
+name: 'ecox14'
+version: '1.0.0'
+
+# Tem que ser igual ao nome do perfil em profiles.yml.
+profile: 'ecox14'
+
+model-paths: ["models"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  ecox14:
+    # padrao: cada modelo vira tabela. A view troca isso no proprio arquivo.
+    +materialized: table
