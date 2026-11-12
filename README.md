@@ -154,10 +154,10 @@ python src/pipeline.py transformacao    # retoma a partir de uma etapa
 | `ingestao` | baixa as duas fontes para a bronze | `dados/bronze/ingerir.py`, `dados/bronze/ingerir_classificacao.py` |
 | `transformacao` | bronze → prata e classificação calculada | `transformar_futebol.py`, `transformar_classificacao.py`, `calcular_classificacao.py` |
 | `enriquecimento` | junta as tabelas da prata | `enriquecer.py` |
-| `carga` | carrega a prata no DuckDB e constrói a ouro | `carga.py` |
-| `modelagem` | ainda não implementada | — |
+| `carga` | carrega a prata no DuckDB (ler arquivo não é transformação) | `carga.py` |
+| `modelagem` | o dbt constrói a ouro a partir da prata no banco; depois, as 9 conferências | `ecox14/` (projeto dbt), `carga.conferir_ouro` |
 
-Etapas ainda não implementadas (hoje, só a `modelagem`) aparecem no log como aviso, em vez de ficarem escondidas.
+Etapas sem função (hoje nenhuma) apareceriam no log como aviso, em vez de ficarem escondidas.
 A retomada existe porque a ingestão bate nas fontes de novo e demora: se o erro está no
 enriquecimento, não há motivo para baixar tudo outra vez. Cada script também roda sozinho
 (`python src/enriquecer.py`), e a ordem entre eles está na tabela acima.
@@ -216,7 +216,8 @@ perguntas deste projeto:
 
 A camada Ouro deixa de ser uma pasta e vira um esquema do banco `dados/ouro/projeto.duckdb`
 (DuckDB: um banco embutido, o banco inteiro é um arquivo). O esquema `prata` recebe os parquets
-como estão; o esquema `ouro` nasce dentro do banco, a partir da prata, escrito em SQL.
+como estão; o esquema `ouro` nasce dentro do banco, a partir da prata, e quem o constrói é o
+dbt (seção abaixo).
 
 ### O grão de cada tabela
 
@@ -280,9 +281,9 @@ dim_time (um time, 23 linhas)
   com os próprios jogos, então inclui o jogo em questão. Serve para agrupar times por força, mas
   não é informação disponível antes da partida.
 
-### Conferências da carga
+### Conferências da ouro
 
-A etapa roda 9 consultas que precisam devolver zero, e levanta erro se alguma não devolver:
+A etapa `modelagem` roda, depois do dbt, 9 consultas que precisam devolver zero, e levanta erro se alguma não devolver:
 grão de cada tabela (nenhuma chave repetida), nenhum fato órfão (todo time da fato existe em
 `dim_time`, todo jogo tem a classificação dos dois times na temporada) e a view não multiplica
 linhas (mesmo número de linhas da `fato_jogo`).
@@ -290,12 +291,12 @@ linhas (mesmo número de linhas da `fato_jogo`).
 ### Como rodar e consultar
 
 ```
-python src/pipeline.py carga      # só a carga, a partir da prata que já existe
-python src/carga.py               # a mesma etapa, fora do pipeline
+python src/pipeline.py carga        # só a carga da prata no banco
+python src/pipeline.py modelagem    # dbt constrói a ouro e as conferências rodam
 ```
 
 Apagar `dados/ouro/projeto.duckdb` é uma forma legítima de recomeçar do zero: a carga recria
-tudo a partir dos parquets da prata. O banco fica fora do Git (`dados/ouro/*` está no
+a prata e o dbt recria a ouro, a partir dos parquets. O banco fica fora do Git (`dados/ouro/*` está no
 `.gitignore`), pelo mesmo motivo da prata: é reproduzível.
 
 Exemplo de consulta (probabilidade implícita contra a frequência real, por faixa):
@@ -310,3 +311,80 @@ FROM ouro.fato_jogo
 GROUP BY prob_casa_faixa
 ORDER BY MIN(prob_casa);
 ```
+
+## Transformação declarativa (dbt)
+
+Até a aula anterior, a ouro era construída por `CREATE TABLE ... AS SELECT` escritos como
+texto dentro de `carga.py`. Funcionava, mas a ordem entre as tabelas só existia na cabeça de
+quem escreveu, não dava para refazer só um pedaço, o `conferir()` era um registro que alguém
+precisava ler e a documentação ficava em comentário solto. Nenhum desses problemas é do DuckDB
+ou do Python: são problemas de organizar transformação.
+
+O **dbt** (data build tool, versão Core, gratuita) pega um `SELECT` e materializa o resultado
+dentro do banco, como tabela ou view. Ele **não executa** SQL: escreve o SQL e entrega ao
+DuckDB, pelo adaptador `dbt-duckdb`. O que ele **não faz** continua em Python: baixar dado,
+ler arquivo para dentro do banco, agendar.
+
+### Estrutura (`ecox14/`)
+
+```
+ecox14/
+  dbt_project.yml          nome, pastas, materialização padrão (tabela)
+  profiles.yml             como conectar: ../dados/ouro/projeto.duckdb, esquema ouro
+  models/
+    sources.yml            as 4 tabelas da prata que o carga.py leva ao banco
+    dim_time.sql           tabela
+    fato_classificacao.sql tabela
+    fato_jogo.sql          tabela
+    vw_jogo_completo.sql   view ({{ config(materialized='view') }}, usa ref)
+```
+
+- **Um modelo é um arquivo `.sql` com um `SELECT`.** O nome do arquivo é o nome da tabela. Os
+  `SELECT` são os mesmos da aula 9, sem o `CREATE TABLE` em volta.
+- **`source('prata', 'odds_enriquecido')`** aponta para uma tabela que o dbt não cria.
+  **`ref('fato_jogo')`** aponta para outro modelo e cria a dependência: só a view usa `ref`.
+  Daí o dbt monta o grafo e decide a ordem sozinho (as três tabelas, depois a view).
+- **Tabela ou view** é uma linha de configuração: a view da aula 9 é um modelo com
+  `materialized='view'` no topo. Trocar por tabela, se um dia ficar lenta, é mudar uma palavra.
+- O `where posicao_casa is not null and posicao_visitante is not null` da `fato_jogo`
+  continua sendo o filtro de integridade que veio da junção da aula 7.
+
+### Decisões
+
+- **`profiles.yml` dentro do repositório**, e não em `C:\Users\<usuario>\.dbt`: o dbt procura
+  primeiro o arquivo da pasta onde roda, e o pipeline roda o dbt de dentro de `ecox14/`. Assim o
+  caminho do banco é relativo (`../dados/ouro/projeto.duckdb`), o projeto funciona em qualquer
+  máquina sem configuração extra e não há segredo no arquivo. Um `profiles.yml` na pasta de
+  usuário continua existindo sem atrapalhar.
+- **O pipeline chama `python -m dbt.cli.main run`**, com o mesmo Python que roda o pipeline,
+  em vez do comando `dbt`: não depende do PATH nem do `dbt.exe` do ambiente virtual. Com
+  `check=True`, se o dbt falhar o Python levanta erro e o pipeline para; sem isso diria que
+  terminou bem com a ouro quebrada.
+- **`construir_ouro` ficou em `carga.py`, só com a chamada comentada**, para comparar as duas
+  formas. A carga agora só carrega a prata; as conferências (`carga.conferir_ouro`) rodam
+  depois do dbt, porque antes dele a ouro ainda não existe (numa execução do zero, conferir na
+  carga falharia).
+- **O dbt não cria `dev.duckdb` nem `models/example/`**: o projeto foi escrito à mão em vez de
+  `dbt init`, então não há banco vazio para o perfil apontar por engano. `target/` e `logs/`
+  (gerados a cada execução, inclusive o SQL que o dbt enviou ao banco) ficam fora do Git.
+
+### Como rodar
+
+```
+python src/pipeline.py modelagem        # dbt run + conferências
+cd ecox14
+dbt debug                               # mostra qual profiles.yml lê e testa a conexão
+dbt run                                 # constrói os 4 modelos
+dbt run --select dim_time+              # só a dimensão e o que depende dela
+```
+
+`Database Error: file is locked` significa que o banco está aberto em outro lugar (um
+notebook, um terminal com `duckdb.connect`): feche a outra conexão e rode de novo.
+
+### Verificação da migração
+
+A ouro construída pelo dbt foi comparada com a construída pelo SQL antigo, tabela por tabela
+(`EXCEPT` nos dois sentidos): mesmas linhas (23, 40, 760 e 760 na view), mesmas colunas e
+tipos, zero diferença. Rodar o pipeline do zero, com o banco apagado, dá o mesmo resultado e
+as 9 conferências devolvem zero. Trocar uma coluna por uma inexistente num modelo faz o dbt
+falhar e o pipeline terminar com erro.
