@@ -155,7 +155,7 @@ python src/pipeline.py transformacao    # retoma a partir de uma etapa
 | `transformacao` | bronze → prata e classificação calculada | `transformar_futebol.py`, `transformar_classificacao.py`, `calcular_classificacao.py` |
 | `enriquecimento` | junta as tabelas da prata | `enriquecer.py` |
 | `carga` | carrega a prata no DuckDB (ler arquivo não é transformação) | `carga.py` |
-| `modelagem` | o dbt constrói a ouro a partir da prata no banco; depois, as 9 conferências | `ecox14/` (projeto dbt), `carga.conferir_ouro` |
+| `modelagem` | `dbt run` constrói a ouro e `dbt test` confere as regras; se um teste falhar, o pipeline para | `ecox14/` (projeto dbt) |
 
 Etapas sem função (hoje nenhuma) apareceriam no log como aviso, em vez de ficarem escondidas.
 A retomada existe porque a ingestão bate nas fontes de novo e demora: se o erro está no
@@ -283,16 +283,15 @@ dim_time (um time, 23 linhas)
 
 ### Conferências da ouro
 
-A etapa `modelagem` roda, depois do dbt, 9 consultas que precisam devolver zero, e levanta erro se alguma não devolver:
-grão de cada tabela (nenhuma chave repetida), nenhum fato órfão (todo time da fato existe em
-`dim_time`, todo jogo tem a classificação dos dois times na temporada) e a view não multiplica
-linhas (mesmo número de linhas da `fato_jogo`).
+Eram 9 consultas escritas à mão no `carga.py`; agora são **testes do dbt** (seção *Testes e
+documentação (dbt)*), com o mesmo critério: grão de cada tabela, nenhum fato órfão e a view sem
+multiplicar linhas.
 
 ### Como rodar e consultar
 
 ```
 python src/pipeline.py carga        # só a carga da prata no banco
-python src/pipeline.py modelagem    # dbt constrói a ouro e as conferências rodam
+python src/pipeline.py modelagem    # dbt run (constrói a ouro) + dbt test (confere)
 ```
 
 Apagar `dados/ouro/projeto.duckdb` é uma forma legítima de recomeçar do zero: a carga recria
@@ -333,10 +332,13 @@ ecox14/
   profiles.yml             como conectar: ../dados/ouro/projeto.duckdb, esquema ouro
   models/
     sources.yml            as 4 tabelas da prata que o carga.py leva ao banco
+    schema.yml             descrição de cada coluna + testes (ver seção abaixo)
+    docs.md                descrições reaproveitadas pela fato e pela view
     dim_time.sql           tabela
     fato_classificacao.sql tabela
     fato_jogo.sql          tabela
     vw_jogo_completo.sql   view ({{ config(materialized='view') }}, usa ref)
+  tests/                   testes escritos à mão (uma consulta por arquivo)
 ```
 
 - **Um modelo é um arquivo `.sql` com um `SELECT`.** O nome do arquivo é o nome da tabela. Os
@@ -361,9 +363,9 @@ ecox14/
   `check=True`, se o dbt falhar o Python levanta erro e o pipeline para; sem isso diria que
   terminou bem com a ouro quebrada.
 - **`construir_ouro` ficou em `carga.py`, só com a chamada comentada**, para comparar as duas
-  formas. A carga agora só carrega a prata; as conferências (`carga.conferir_ouro`) rodam
-  depois do dbt, porque antes dele a ouro ainda não existe (numa execução do zero, conferir na
-  carga falharia).
+  formas. A carga agora só carrega a prata. As conferências antigas (`conferir_ouro`) também
+  ficaram, sem uso: quem cobra as regras é o `dbt test`, que roda depois do `dbt run` na etapa
+  `modelagem`.
 - **O dbt não cria `dev.duckdb` nem `models/example/`**: o projeto foi escrito à mão em vez de
   `dbt init`, então não há banco vazio para o perfil apontar por engano. `target/` e `logs/`
   (gerados a cada execução, inclusive o SQL que o dbt enviou ao banco) ficam fora do Git.
@@ -386,5 +388,140 @@ notebook, um terminal com `duckdb.connect`): feche a outra conexão e rode de no
 A ouro construída pelo dbt foi comparada com a construída pelo SQL antigo, tabela por tabela
 (`EXCEPT` nos dois sentidos): mesmas linhas (23, 40, 760 e 760 na view), mesmas colunas e
 tipos, zero diferença. Rodar o pipeline do zero, com o banco apagado, dá o mesmo resultado e
-as 9 conferências devolvem zero. Trocar uma coluna por uma inexistente num modelo faz o dbt
+todos os testes passam. Trocar uma coluna por uma inexistente num modelo faz o dbt
 falhar e o pipeline terminar com erro.
+
+## Testes e documentação (dbt)
+
+Um teste automatizado é uma regra escrita que o computador confere sozinho toda vez que o
+pipeline roda. Em dado, o que se testa é o **resultado** (o código pode estar certo e o dado
+chegar errado da fonte). Antes, a conferência era um `log.info` que alguém precisava ler; agora
+um teste que falha **para o pipeline**.
+
+**Convenção:** um teste é uma consulta que procura o defeito e **passa quando devolve zero
+linhas**. `FAIL 7` quer dizer "encontrou 7 linhas que não deveriam existir".
+
+### Dois tipos de teste
+
+- **Pronto:** declarado no `ecox14/models/schema.yml`; o dbt escreve a consulta. Usados aqui:
+  `unique`, `not_null`, `relationships` e `accepted_values`.
+- **Próprio:** um `.sql` em `ecox14/tests/`, para o que nenhum teste pronto cobre. É o caso das
+  chaves compostas.
+
+| Conferência antiga (`carga.py`) | Teste do dbt |
+|---|---|
+| `fato_jogo`: `jogo_id` repetido | `unique` e `not_null` em `fato_jogo.jogo_id` |
+| `fato_classificacao`: (time, temporada) repetido | próprio: `tests/grao_fato_classificacao.sql` (chave composta) |
+| `dim_time`: `time_id` repetido | `unique` e `not_null` em `dim_time.time_id` |
+| `fato_jogo` sem o mandante na `dim_time` | `relationships` em `time_casa_id` |
+| `fato_jogo` sem o visitante na `dim_time` | `relationships` em `time_visitante_id` |
+| `fato_classificacao` sem o time na `dim_time` | `relationships` em `time_id` |
+| jogo sem classificação do mandante na temporada | próprio: `tests/jogo_sem_classificacao_mandante.sql` |
+| jogo sem classificação do visitante na temporada | próprio: `tests/jogo_sem_classificacao_visitante.sql` |
+| view com linhas a mais ou a menos que a fato | próprio: `tests/view_com_linhas_diferentes_da_fato.sql` |
+
+Além desses nove, entraram regras novas: `accepted_values` em `resultado` (só `casa`, `empate`,
+`visitante`), `not_null` nas colunas essenciais e um teste próprio de domínio
+(`tests/odds_fora_do_dominio.sql`: odd decimal nunca é menor que 1,0, e a decisão de tratamento
+já dizia que isso seria erro de coleta). Total: **26 testes** (21 gerados do YAML e 5 próprios).
+
+```
+cd ecox14
+dbt test                                                        # todos
+dbt test --select fato_jogo                                     # só os da fato_jogo
+dbt test --select grao_fato_classificacao --store-failures      # grava as linhas que falharam
+```
+
+Com `--store-failures` o dbt grava as linhas defeituosas numa tabela (esquema
+`ouro_dbt_test__audit`) para investigar: teste que só diz "falhou" não ajuda ninguém.
+
+**Os testes foram provados, não só escritos.** Cinco defeitos foram injetados na ouro (jogo
+repetido, classificação repetida, mandante inexistente, resultado inválido, odd abaixo de 1,0) e
+o `dbt test` acusou 7 falhas, saindo com erro. Com um modelo alterado de propósito, a etapa
+`modelagem` do pipeline falhou e o pipeline parou.
+
+### Documentação
+
+A descrição de cada coluna fica no `schema.yml`, ao lado do teste. As frases reaproveitadas pela
+`fato_jogo` e pela `vw_jogo_completo` ficam uma vez só em `ecox14/models/docs.md` (blocos
+`docs`). Os 4 modelos e as 56 colunas estão documentados. Nada é escrito duas vezes, então a
+descrição não fica desatualizada: ou está certa, ou o código mudou junto.
+
+```
+cd ecox14
+dbt docs generate
+dbt docs serve            # abre o site em localhost:8080 (Ctrl+C para parar)
+```
+
+O site mostra o grafo dos modelos (as fontes da prata, as três tabelas, a view) e o que cada
+coluna significa. É o que mostra **o que as tabelas são**. Para ver **o que há dentro delas**, as
+linhas de verdade, use a interface do DuckDB:
+
+1. baixe o pacote de linha de comando do Windows em duckdb.org e descompacte o `duckdb.exe` na
+   raiz do projeto (ele está no `.gitignore`: é programa, não é código);
+2. na raiz do projeto: `.\duckdb.exe -ui dados/ouro/projeto.duckdb` (abre em `localhost:4213`).
+
+Feche o painel do DuckDB antes de rodar o pipeline, e o pipeline antes de abrir o painel: o
+DuckDB trava o arquivo.
+
+## Painel (`dashboard/`)
+
+O dado chega a quem precisa dele. O painel é feito em **Streamlit** (biblioteca que transforma
+um script Python em página web, grátis e local) e responde à pergunta do projeto: dentro de cada
+faixa de favoritismo do mandante, a probabilidade implícita na odd bate com a frequência real de
+vitória?
+
+```
+streamlit run dashboard/painel.py       # a partir da raiz; abre o navegador. Ctrl+C para parar
+```
+
+```
+dashboard/
+  consultas.py     todo o SQL de leitura: uma função por pergunta
+  painel.py        só a tela: nenhuma linha de SQL
+```
+
+- **Consumidor, não produtor.** O painel abre o banco com `read_only=True`: não cria nem altera
+  nada e, aberto, não impede o dbt de rodar. A seta aponta num sentido só, da ouro para o painel,
+  e por isso a pasta fica fora de `src/` e fora do pipeline. Ele precisa que a ouro já exista
+  (`python src/pipeline.py modelagem`).
+- **Onde o SQL mora.** SQL que cria tabela vive no dbt, versionado e testado. SQL de leitura vive
+  em `consultas.py`, reaproveitável fora do painel. A tela não tem SQL. Valor que vem da tela
+  entra como parâmetro (`?`), nunca concatenado no texto, e o banco nunca o interpreta como
+  comando (testado com um valor do tipo `2021/22' or '1'='1`, que devolve zero linhas).
+- **Tela:** filtros de temporada e de força relativa (mandante ou visitante melhor posicionado),
+  três números (jogos, vitórias do mandante, probabilidade implícita média), o gráfico de
+  calibração com a diagonal de calibração perfeita, a tabela por faixa e um rodapé com a fonte
+  lida da proveniência da ingestão.
+- **A probabilidade é normalizada no painel.** A ouro guarda `prob_casa` bruta (1/odd), cuja soma
+  das três opções é em média 1,054, porque a odd embute a margem da casa de apostas. Comparar a
+  bruta com a frequência real faria o mercado parecer enviesado só por causa da margem. A consulta
+  divide pela soma das três e mostra as duas versões lado a lado. Se essa normalização virar
+  definição oficial do projeto, o lugar certo dela é uma coluna do `fato_jogo` no dbt.
+- **O filtro de força relativa exige cuidado**, e o painel avisa na tela quando ele está ligado:
+  a posição vem da classificação final da temporada, que já inclui o resultado dos jogos. Times
+  que terminam bem posicionados venceram mais, então a frequência real aparece acima da
+  probabilidade implícita sem que isso diga algo sobre as odds (por exemplo, "mandante melhor
+  posicionado" mostra +6,8 pontos percentuais; no total geral a diferença é de +2,1). Para
+  afirmar algo sobre força relativa seria preciso uma classificação anterior ao jogo.
+
+## Governança
+
+No momento em que o número aparece na tela de alguém, ele deixa de ser só do projeto e passa a
+embasar uma decisão. Três perguntas:
+
+- **De onde veio este número?** Registrado em todas as camadas: a bronze guarda a fonte, o
+  arquivo e a data de extração (`proveniencia.json`), a prata registra o que foi feito em cada
+  transformação (`proveniencia.jsonl`) e o painel mostra a fonte no rodapé.
+- **Quem pode vê-lo?** O painel roda na máquina de quem o executa (`localhost`), sem publicação
+  e sem acesso externo.
+- **O que acontece se estiver errado?** Os testes do dbt param o pipeline. Limite conhecido: o
+  `dbt run` já gravou a ouro quando o `dbt test` falha, então um painel aberto depois disso
+  mostraria a ouro defeituosa. O pipeline avisa, mas o painel não sabe. Dá para reconstruir como
+  qualquer número foi calculado: a bronze é versionada, a prata é reproduzível, o SQL dos modelos
+  está no repositório e o dbt grava o SQL que enviou ao banco em `ecox14/target/`.
+
+**Dado pessoal.** Nenhum dado do projeto identifica pessoas: são resultados de partidas, odds e
+classificação de times, de fontes públicas e agregadas. Isso foi uma escolha de projeto. Com dado
+pessoal (LGPD) seriam outras decisões, todas registradas e nenhuma técnica: coletar só o
+necessário, dizer para que serve, definir prazo de descarte e controlar quem acessa.
