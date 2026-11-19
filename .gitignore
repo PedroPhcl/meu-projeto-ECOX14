@@ -12,3 +12,6 @@ pipeline.log
 ecox14/target/
 ecox14/logs/
 ecox14/dbt_packages/
+
+# DuckDB: executavel para a interface web (programa, nao codigo)
+duckdb.exe
