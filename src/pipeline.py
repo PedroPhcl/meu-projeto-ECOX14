@@ -25,8 +25,12 @@ ETAPAS
     enriquecimento  junta as tabelas da prata
     carga           carrega a prata no DuckDB (leitura de arquivo, nao e
                     transformacao)
-    modelagem       dbt constroi a ouro (esquema estrela) a partir da prata
-                    no banco; depois, conferencias de grao e orfaos
+    modelagem       dbt run constroi a ouro (esquema estrela) a partir da
+                    prata no banco; dbt test confere as regras (grao,
+                    orfaos, valores aceitos) e para o pipeline se falharem
+
+O painel (dashboard/) nao e uma etapa: ele so consome a ouro, em modo
+somente leitura, e roda a parte com "streamlit run dashboard/painel.py".
 """
 
 import logging
@@ -73,22 +77,24 @@ def etapa_carga():
     carga.main()
 
 
-def etapa_modelagem():
-    import carga
-
+def _dbt(comando):
     # check=True faz o Python levantar erro se o dbt falhar. Sem ele, o
     # pipeline diria que terminou bem com a ouro quebrada.
     # "python -m dbt.cli.main" usa o dbt do mesmo Python que roda o pipeline,
     # sem depender do PATH nem do dbt.exe do ambiente virtual.
     subprocess.run(
         [sys.executable, "-W", "ignore::RuntimeWarning",
-         "-m", "dbt.cli.main", "run"],
+         "-m", "dbt.cli.main", comando],
         cwd=config.RAIZ / "ecox14",
         check=True,
     )
-    # A carga ja fechou o banco; o dbt tambem. Agora que a ouro existe,
-    # as conferencias de grao e orfaos fazem sentido.
-    carga.conferir_ouro()
+
+
+def etapa_modelagem():
+    _dbt("run")
+    # Os testes substituem o conferir() da carga: se algum falhar, o dbt sai
+    # com erro, o check=True levanta, e o pipeline para.
+    _dbt("test")
 
 
 ETAPAS = [

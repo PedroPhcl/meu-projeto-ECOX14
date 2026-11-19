@@ -5,7 +5,8 @@ A construcao da ouro era feita aqui, em SQL dentro do Python. Agora e do
 dbt (pasta ecox14/, etapa modelagem do pipeline). Os SQLs e a funcao
 construir_ouro continuam neste arquivo so como referencia da forma antiga.
 A carga segue dona do que nao e transformacao: ler os parquets e abrir o
-banco. As conferencias (conferir_ouro) rodam depois do dbt.
+banco. As conferencias da ouro tambem migraram para o dbt (dbt test);
+VERIFICACOES e conferir_ouro ficam aqui so como referencia da forma antiga.
 
 O banco inteiro e um arquivo (config.BANCO). Apagar esse arquivo e uma
 forma legitima de recomecar do zero: a carga recria a prata e o dbt
@@ -249,8 +250,9 @@ def main():
 
 
 def conferir_ouro():
-    """Roda as conferencias na ouro. Vem depois do dbt, que e quem a cria:
-    antes dele as tabelas ainda nao existem."""
+    """Forma antiga das conferencias, sem uso no pipeline: agora sao testes
+    do dbt (ecox14/models/schema.yml e ecox14/tests/). Fica so para comparar.
+    Precisa rodar depois do dbt, que e quem cria a ouro."""
     con = conectar()
     try:
         conferir(con)

@@ -1,0 +1,205 @@
+version: 2
+
+# Aqui ficam, lado a lado, o que cada coluna significa (description) e o que
+# se espera dela (data_tests). O dbt gera o SQL dos testes e o site de
+# documentação a partir deste arquivo. As regras que nenhum teste pronto
+# cobre (chave composta, domínio das odds) estão em ecox14/tests/.
+
+models:
+  - name: dim_time
+    description: >
+      Dimensão de times. Uma linha é um time: os 23 que aparecem como
+      mandante ou visitante nas partidas de 2021/22 e 2022/23 da Premier League.
+    columns:
+      - name: time_id
+        description: Chave do time (nome sem acento, em minúsculas). Chave primária.
+        data_tests:
+          - unique
+          - not_null
+      - name: nome
+        description: Nome do time como aparece na fonte de odds.
+        data_tests:
+          - not_null
+
+  - name: fato_classificacao
+    description: >
+      Classificação final de cada time em cada temporada, calculada a partir
+      dos próprios jogos (3 pontos por vitória, 1 por empate; desempate por
+      saldo de gols e depois gols marcados). Uma linha é um time em uma
+      temporada. Não é a tabela oficial do campeonato.
+    columns:
+      - name: time_id
+        description: Time. Aponta para `dim_time.time_id`. Junto com a temporada, forma a chave primária.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_time')
+                field: time_id
+      - name: temporada
+        description: Temporada no formato `2021/22`.
+        data_tests:
+          - not_null
+      - name: posicao
+        description: >
+          Posição final do time na temporada. Inclui o jogo que se está
+          analisando, então não é uma informação disponível antes da partida.
+          Não se soma.
+        data_tests:
+          - not_null
+      - name: pontos
+        description: Pontos na temporada.
+        data_tests:
+          - not_null
+      - name: jogos
+        description: Partidas disputadas na temporada.
+      - name: vitorias
+        description: Vitórias na temporada.
+      - name: empates
+        description: Empates na temporada.
+      - name: derrotas
+        description: Derrotas na temporada.
+      - name: gols_pro
+        description: Gols marcados na temporada.
+      - name: gols_contra
+        description: Gols sofridos na temporada.
+      - name: saldo_gols
+        description: Gols marcados menos gols sofridos.
+
+  - name: fato_jogo
+    description: >
+      Fato de partidas. Uma linha é uma partida da Premier League (um mandante
+      contra um visitante, em uma temporada), com odds da Bet365, probabilidades
+      implícitas e resultado. Só entram jogos cujos dois times têm classificação
+      calculada; nesses dados nenhum é excluído.
+    columns:
+      - name: jogo_id
+        description: "{{ doc('col_jogo_id') }}"
+        data_tests:
+          - unique
+          - not_null
+      - name: data
+        description: "{{ doc('col_data') }}"
+        data_tests:
+          - not_null
+      - name: temporada
+        description: "{{ doc('col_temporada') }}"
+        data_tests:
+          - not_null
+      - name: time_casa_id
+        description: "{{ doc('col_time_casa_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_time')
+                field: time_id
+      - name: time_visitante_id
+        description: "{{ doc('col_time_visitante_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_time')
+                field: time_id
+      - name: gols_casa
+        description: "{{ doc('col_gols_casa') }}"
+      - name: gols_visitante
+        description: "{{ doc('col_gols_visitante') }}"
+      - name: resultado
+        description: "{{ doc('col_resultado') }}"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['casa', 'empate', 'visitante']
+      - name: odd_casa
+        description: "{{ doc('col_odd_casa') }}"
+        data_tests:
+          - not_null
+      - name: odd_empate
+        description: "{{ doc('col_odd_empate') }}"
+        data_tests:
+          - not_null
+      - name: odd_visitante
+        description: "{{ doc('col_odd_visitante') }}"
+        data_tests:
+          - not_null
+      - name: prob_casa
+        description: "{{ doc('col_prob_casa') }}"
+      - name: prob_empate
+        description: "{{ doc('col_prob_empate') }}"
+      - name: prob_visitante
+        description: "{{ doc('col_prob_visitante') }}"
+      - name: prob_casa_faixa
+        description: "{{ doc('col_prob_casa_faixa') }}"
+      - name: odd_casa_extremo
+        description: "{{ doc('col_odd_casa_extremo') }}"
+      - name: odd_visitante_extremo
+        description: "{{ doc('col_odd_visitante_extremo') }}"
+
+  - name: vw_jogo_completo
+    description: >
+      View: a tabela achatada para consulta. Uma linha é uma partida (as mesmas
+      da `fato_jogo`), com o nome dos times e a classificação final de cada um
+      na temporada. Não guarda dado: o banco executa o join na hora.
+    columns:
+      - name: jogo_id
+        description: "{{ doc('col_jogo_id') }}"
+      - name: data
+        description: "{{ doc('col_data') }}"
+      - name: temporada
+        description: "{{ doc('col_temporada') }}"
+      - name: time_casa_id
+        description: "{{ doc('col_time_casa_id') }}"
+      - name: time_visitante_id
+        description: "{{ doc('col_time_visitante_id') }}"
+      - name: gols_casa
+        description: "{{ doc('col_gols_casa') }}"
+      - name: gols_visitante
+        description: "{{ doc('col_gols_visitante') }}"
+      - name: resultado
+        description: "{{ doc('col_resultado') }}"
+      - name: odd_casa
+        description: "{{ doc('col_odd_casa') }}"
+      - name: odd_empate
+        description: "{{ doc('col_odd_empate') }}"
+      - name: odd_visitante
+        description: "{{ doc('col_odd_visitante') }}"
+      - name: prob_casa
+        description: "{{ doc('col_prob_casa') }}"
+      - name: prob_empate
+        description: "{{ doc('col_prob_empate') }}"
+      - name: prob_visitante
+        description: "{{ doc('col_prob_visitante') }}"
+      - name: prob_casa_faixa
+        description: "{{ doc('col_prob_casa_faixa') }}"
+      - name: odd_casa_extremo
+        description: "{{ doc('col_odd_casa_extremo') }}"
+      - name: odd_visitante_extremo
+        description: "{{ doc('col_odd_visitante_extremo') }}"
+      - name: time_casa
+        description: Nome do time mandante (vem de `dim_time`).
+      - name: time_visitante
+        description: Nome do time visitante (vem de `dim_time`).
+      - name: posicao_casa
+        description: Posição final do mandante na temporada (ver `fato_classificacao.posicao`).
+      - name: posicao_visitante
+        description: Posição final do visitante na temporada.
+      - name: pontos_casa
+        description: Pontos do mandante na temporada.
+      - name: pontos_visitante
+        description: Pontos do visitante na temporada.
+      - name: dif_posicao
+        description: >
+          `posicao_visitante` menos `posicao_casa`. Positivo quando o mandante
+          termina a temporada à frente do visitante.
+      - name: dif_pontos
+        description: >
+          `pontos_casa` menos `pontos_visitante`. Positivo quando o mandante
+          faz mais pontos na temporada.
+      - name: mandante_melhor_posicionado
+        description: >
+          Verdadeiro quando o mandante termina a temporada à frente do
+          visitante (`dif_posicao` > 0). Mede força relativa, não favoritismo
+          antes do jogo.
